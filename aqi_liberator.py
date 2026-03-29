@@ -14,7 +14,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ATTSSE_URL = "https://att.waqi.info/api/attsse"
@@ -75,6 +75,8 @@ def decode_series(encoded: str) -> list[tuple[int, float]]:
         elif ch == 47:  # /
             i += 1
             num, i = _read_number(encoded, i)
+            if num == 0:
+                raise ValueError(f"scale factor /0 at pos {i}")
             scale = num
             continue
         elif ch == 33:  # !
@@ -114,6 +116,9 @@ def _read_number(s: str, i: int) -> tuple[float, int]:
         i += 1
     if i < len(s) and s[i] == '.':
         i += 1
+        # Skip fractional digits (encoding uses integer-only values, decimal point is a separator)
+        while i < len(s) and s[i].isdigit():
+            i += 1
     return sign * num, i
 
 
@@ -123,11 +128,14 @@ def _read_number(s: str, i: int) -> tuple[float, int]:
 
 def parse_sse(content: str) -> list[dict]:
     events = []
+    skipped = 0
     for m in re.finditer(r'event: data\ndata: (.+)', content):
         try:
             events.append(json.loads(m.group(1)))
         except json.JSONDecodeError:
-            pass
+            skipped += 1
+    if skipped:
+        stderr(f"warning: skipped {skipped} malformed SSE events")
     return events
 
 
@@ -244,8 +252,17 @@ def log_usage(cmd: str, ok: bool, ms: int, **extra):
 # CLI commands
 # ---------------------------------------------------------------------------
 
+def _validate_station_ids(ids: list[str]):
+    for sid in ids:
+        if not sid.isdigit():
+            stderr(f"invalid station ID '{sid}': expected a number")
+            stderr(f"  try: aqi-liberator stations --search 'city name'")
+            sys.exit(1)
+
+
 def cmd_fetch(args):
     t0 = time.monotonic()
+    _validate_station_ids(args.stations)
     pols = args.pol.split(",") if args.pol else None
     all_rows = []
 
@@ -298,6 +315,12 @@ def cmd_fetch(args):
 def cmd_decode(args):
     t0 = time.monotonic()
     pols = args.pol.split(",") if args.pol else None
+
+    if not args.raw and not args.files:
+        stderr("provide files or --raw for stdin")
+        stderr("  aqi-liberator decode FILE.sse")
+        stderr("  echo '!104eZXJg' | aqi-liberator decode --raw")
+        sys.exit(1)
 
     if args.raw:
         # Decode a single encoded string from stdin
@@ -352,6 +375,7 @@ def cmd_decode(args):
 
 def cmd_compare(args):
     t0 = time.monotonic()
+    _validate_station_ids(args.stations)
     pol = args.pol or "pm25"
     station_data = {}
 
@@ -444,6 +468,8 @@ def cmd_usage(args):
         stderr("no usage data yet")
         sys.exit(0)
     from collections import Counter
+    cutoff = datetime.now(timezone.utc).isoformat()[:10]
+    cutoff_30d = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     cmds = Counter()
     ok_count = 0
     fail_count = 0
@@ -454,6 +480,8 @@ def cmd_usage(args):
             try:
                 entry = json.loads(line)
             except json.JSONDecodeError:
+                continue
+            if entry.get("ts", "") < cutoff_30d:
                 continue
             n += 1
             cmds[entry.get("cmd", "?")] += 1
