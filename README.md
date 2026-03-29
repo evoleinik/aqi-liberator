@@ -37,8 +37,11 @@ aqi-liberator fetch 5775 --json --pol pm25 | jq '.[0]'
 aqi-liberator fetch 5775 --save
 aqi-liberator decode 5775.sse --pol pm25,pm10
 
-# Find station IDs
+# Find station IDs by name
 aqi-liberator stations --search "bangkok"
+
+# Find nearest stations by coordinates (for cities without named stations)
+aqi-liberator stations --near 12.57,99.95
 ```
 
 ## Finding station IDs
@@ -107,9 +110,12 @@ date,Chiang Mai,Rayong
 ### `stations` — find station IDs
 
 ```bash
-aqi-liberator stations --search "city name"
+aqi-liberator stations --search "city name"    # search by name
+aqi-liberator stations --near 12.57,99.95      # search by coordinates
   --json
 ```
+
+The `--near` flag is useful for cities without a named station — it returns the closest monitored stations by distance.
 
 ### `usage` — telemetry
 
