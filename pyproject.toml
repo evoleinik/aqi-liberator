@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aqi-liberator"
+version = "0.1.0"
+description = "Decode aqicn.org historical AQI data — set the data free"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+keywords = ["aqi", "air-quality", "aqicn", "waqi", "pollution", "open-data"]
+classifiers = [
+    "Environment :: Console",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+]
+
+[project.scripts]
+aqi-liberator = "aqi_liberator:main"
+
+[project.urls]
+Repository = "https://github.com/evgeniyol/aqi-liberator"
